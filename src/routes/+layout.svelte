@@ -11,5 +11,5 @@
 
 
   <ModeWatcher />
-  <Toaster />
+  <Toaster position="top-right" duration={2000}/>
   <slot />

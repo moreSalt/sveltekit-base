@@ -1,122 +1,184 @@
 <script lang="ts">
-    import { Button, buttonVariants } from "$lib/components/ui/button";
-    import * as Card from "$lib/components/ui/card";
-    import * as Select from "$lib/components/ui/select";
+    import { Button } from "$lib/components/ui/button";
     import { Input } from "$lib/components/ui/input";
-    import { Label } from "$lib/components/ui/label";
-    import { Sun, Moon } from "radix-icons-svelte";
-    import { toast } from "svelte-sonner";
+    import * as Collapsible from "$lib/components/ui/collapsible";
+    import { ChevronsUpDown } from "lucide-svelte";
+    import { Sun, Moon, Play, Stop, NotionLogo } from "radix-icons-svelte";
     import { toggleMode } from "mode-watcher";
+    import { Progress } from "$lib/components/ui/progress";
+    import { toast } from "svelte-sonner";
+    import { onMount } from 'svelte'
+    import Recorder from "$lib/components/ui/recorder.svelte";
 
-    import * as Dialog from "$lib/components/ui/dialog";
 
-    const frameworks = [
-        {
-            value: "sveltekit",
-            label: "SvelteKit",
-        },
-        {
-            value: "next",
-            label: "Next.js",
-        },
-        {
-            value: "astro",
-            label: "Astro",
-        },
-        {
-            value: "nuxt",
-            label: "Nuxt.js",
-        },
-    ];
+    let exampleLatex = "If the sky is blue, then it is not raining.\n\n\\begin{equation}\n\\text{Sky is blue} \\Rightarrow \\text{Not raining}\n\\end{equation}"
+
+    let latexText = ""
+    let notPlaying = false
+    let stt = ""
+    let ttl = ""
+    let formData: FormData | null
+    let enabled = false;
+    let progress = 0
+    let fileName = ""
+
+
+    async function getSTT() {
+        const response = await fetch("/api/speechtotext", {
+            method: "POST",
+            body: formData
+        })
+
+        const body = await response.json()
+
+        if (response.status !== 201 || body.error) {
+            throw new Error(body.message)
+        }
+
+        return body.text
+    }
+
+    async function getTTL () {
+        const response = await fetch("/api/texttolatex", {
+            method: "POST",
+            body: JSON.stringify({
+                text: stt
+            })
+        })
+
+        const body = await response.json()
+
+        if (response.status !== 201 || body.error) {
+            throw new Error(body.message)
+        }
+        
+        return body.latex
+    }
+
+
+    async function handleSubmit(event: { currentTarget: EventTarget & HTMLFormElement }) {
+        enabled = true
+        formData = new FormData(event.currentTarget)
+
+
+        // // Speech to text, with a toast
+        await toast.promise(getSTT, {
+            loading: "Converting speech to text...",
+            success: (data) => {
+                progress = 50
+                stt = data
+                
+                // Text to Latex, done within the other toast because the first one resolves before it actually comepltes
+                toast.promise(getTTL, {
+                    loading: "Converting text to Latex...",
+                    success: (data) => {
+                        progress = 100
+                        ttl = data
+                        return "Text has been converted to Latex"
+                    },
+                    error: (data) => {
+                        return `${data}`
+                    }
+                })
+                return "Speech has been converted to text"
+            },
+            error: (data) => {
+                return `${data}`
+            }
+        })
+        
+    }
+
+
+
+
 </script>
 
-<Button on:click={toggleMode} variant="outline" size="icon">
-    <Sun
-        class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
-    />
-    <Moon
-        class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
-    />
-    <span class="sr-only">Toggle theme</span>
-</Button>
 
-<Card.Root class="w-[350px]">
-    <Card.Header>
-        <Card.Title>Create project</Card.Title>
-        <Card.Description
-            >Deploy your new project in one-click.</Card.Description
-        >
-    </Card.Header>
-    <Card.Content>
-        <form>
-            <div class="grid w-full items-center gap-4">
-                <div class="flex flex-col space-y-1.5">
-                    <Label for="name">Name</Label>
-                    <Input id="name" placeholder="Name of your project" />
+<div class="flex flex-col justify-between p-4 gap-4 items-center justify-center">
+    <Button on:click={toggleMode} variant="outline" size="icon">
+        <Sun
+            class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+        />
+        <Moon
+            class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+        />
+        <span class="sr-only">Toggle theme</span>
+    </Button>
+
+    <Recorder />
+
+    {#if enabled}
+
+        <h2 class="w-full max-w-xl sm:max-w-2xl text-left font-semibold">Converting audio: {progress !== 100 ? `${progress}%` : "Completed"}</h2>
+        <Progress value={progress} max={100} class="w-full max-w-xl sm:max-w-2xl" />
+
+        {#if stt}
+            <Collapsible.Root class="w-full max-w-xl sm:max-w-2xl space-y-2">
+
+                <div class="flex items-center justify-between space-x-4">
+                    <h4 class="text-sm font-semibold">Speech to text response</h4>
+                    <Collapsible.Trigger asChild let:builder>
+                    <Button builders={[builder]} variant="outline" size="sm" class="w-9 p-0">
+                        <ChevronsUpDown class="h-4 w-4" />
+                        <span class="sr-only">Speech to text response</span>
+                    </Button>
+                    </Collapsible.Trigger>
                 </div>
-                <div class="flex flex-col space-y-1.5">
-                    <Label for="framework">Framework</Label>
-                    <Select.Root>
-                        <Select.Trigger id="framework">
-                            <Select.Value placeholder="Select" />
-                        </Select.Trigger>
-                        <Select.Content>
-                            {#each frameworks as framework}
-                                <Select.Item
-                                    value={framework.value}
-                                    label={framework.label}
-                                    >{framework.label}</Select.Item
-                                >
-                            {/each}
-                        </Select.Content>
-                    </Select.Root>
+
+
+                <Collapsible.Content class="space-y-2">
+                        <div class="rounded-md border px-4 py-3 font-mono text-xs select-all">
+                            {stt}
+                        </div>
+                </Collapsible.Content>
+            </Collapsible.Root>
+        {/if}
+
+        {#if ttl}
+            <Collapsible.Root class="w-full max-w-xl sm:max-w-2xl space-y-2">
+
+                <div class="flex items-center justify-between space-x-4">
+                    <h4 class="text-sm font-semibold">Text to Latex response</h4>
+                    <Collapsible.Trigger asChild let:builder>
+                    <Button builders={[builder]} variant="outline" size="sm" class="w-9 p-0">
+                        <ChevronsUpDown class="h-4 w-4" />
+                        <span class="sr-only">Text to Latex response</span>
+                    </Button>
+                    </Collapsible.Trigger>
                 </div>
-            </div>
+
+
+                <Collapsible.Content class="space-y-2">
+                        <div class="rounded-md border px-4 py-3 font-mono text-xs select-all">
+                            {ttl}
+                        </div>
+                </Collapsible.Content>
+            </Collapsible.Root>
+        {/if}
+
+        {#if ttl && stt}
+            <Button on:click={() => {
+                ttl = ""
+                stt = ""
+                enabled = false
+                progress = 0
+            }} variant="outline">
+                Reset
+            </Button>
+        {/if}
+    {:else} 
+        <form class="flex w-full max-w-xl sm:max-w-2xl items-center space-x-2" on:submit|preventDefault={handleSubmit}>
+            <Input id="audio" name="file" type="file" />
+            <Button type="submit" variant="outline">Submit</Button>
         </form>
-    </Card.Content>
-    <Card.Footer class="flex justify-between">
-        <Button variant="outline">Cancel</Button>
-        <Button>Deploy</Button>
-    </Card.Footer>
-</Card.Root>
+    {/if}
 
-<Button
-    variant="outline"
-    on:click={() =>
-        toast("Event has been created", {
-            description: "Sunday, December 03, 2023 at 9:00 AM",
-            action: {
-                label: "Undo",
-                onClick: () => console.log("Undo"),
-            },
-        })}
->
-    Show Toast
-</Button>
+    <!-- <div class="text-white w-full max-w-xl border h-64">
+        {@html output}
+    </div> -->
 
-<Dialog.Root>
-    <Dialog.Trigger class={buttonVariants({ variant: "outline" })}
-        >Edit Profile</Dialog.Trigger
-    >
-    <Dialog.Content class="sm:max-w-[425px]">
-        <Dialog.Header>
-            <Dialog.Title>Edit profile</Dialog.Title>
-            <Dialog.Description>
-                Make changes to your profile here. Click save when you're done.
-            </Dialog.Description>
-        </Dialog.Header>
-        <div class="grid gap-4 py-4">
-            <div class="grid grid-cols-4 items-center gap-4">
-                <Label for="name" class="text-right">Name</Label>
-                <Input id="name" value="Pedro Duarte" class="col-span-3" />
-            </div>
-            <div class="grid grid-cols-4 items-center gap-4">
-                <Label for="username" class="text-right">Username</Label>
-                <Input id="username" value="@peduarte" class="col-span-3" />
-            </div>
-        </div>
-        <Dialog.Footer>
-            <Button type="submit">Save changes</Button>
-        </Dialog.Footer>
-    </Dialog.Content>
-</Dialog.Root>
+
+</div>
+
+

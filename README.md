@@ -21,3 +21,9 @@ My personal Sveltekit base
 
 ## TODO
 - [ ] Warning about radix icons
+- [ ] Remove unused dependencies
+
+## Technologies
+- Sveltekit (Basically NextJS for Svelte): [Fairly fun and nice tutorial for Svelte](https://learn.svelte.dev/tutorial/welcome-to-svelte)
+- [TailwindCSS (styling)](https://tailwindcss.com/docs/installation)
+- [ShadCN for Svelte (componenets)](https://tailwindcss.com/docs/installation)
